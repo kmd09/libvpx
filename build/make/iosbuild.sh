@@ -53,7 +53,7 @@ build_target() {
 
   mkdir "${target}"
   cd "${target}"
-  eval "${LIBVPX_SOURCE_DIR}/configure" --target="${target}" \
+  eval "${LIBVPX_SOURCE_DIR}/configure" --target="${target}" --enable-shared \
     ${CONFIGURE_ARGS} ${EXTRA_CONFIGURE_ARGS} ${target_specific_flags} \
     ${devnull}
   export DIST_DIR
@@ -154,7 +154,8 @@ build_framework() {
   for target in ${targets}; do
     build_target "${target}"
     target_dist_dir="${BUILD_ROOT}/${target}/${DIST_DIR}"
-    lib_list="${lib_list} ${target_dist_dir}/lib/libvpx.a"
+    #lib_list="${lib_list} ${target_dist_dir}/lib/libvpx.a"
+    lib_list="${lib_list} ${target_dist_dir}/lib/libvpx.dylib"
   done
 
   cd "${ORIG_PWD}"
