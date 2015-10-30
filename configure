@@ -511,7 +511,7 @@ process_detect() {
             if enabled gnu; then
                 echo "--enable-shared is only supported on ELF; assuming this is OK"
             else
-                die "--enable-shared only supported on ELF and OS/2 for now"
+                die "--enable-shared only supported on ELF, OS/2, and Darwin for now"
             fi
         fi
     fi
