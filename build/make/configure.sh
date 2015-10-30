@@ -756,8 +756,6 @@ process_common_toolchain() {
         add_cflags  "-isysroot ${iphoneos_sdk_dir}"
         add_ldflags "-isysroot ${iphoneos_sdk_dir}"
       fi
-      # Xcode 7 really wants bitcode
-      add_cflags "-fembed-bitcode"
       ;;
     x86*-darwin*)
       osx_sdk_dir="$(show_darwin_sdk_path macosx)"
