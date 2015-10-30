@@ -166,6 +166,7 @@ build_framework() {
 
   # Build the fat library.
   ${LIPO} -create ${lib_list} -output ${FRAMEWORK_DIR}/VPX
+  install_name_tool -change '@executable_path/libvpx.2.dylib' '@rpath/VPX.framework/VPX' ${FRAMEWORK_DIR}/VPX
 
   # Create the vpx_config.h shim that allows usage of vpx_config.h from
   # within VPX.framework.
@@ -173,6 +174,13 @@ build_framework() {
 
   # Copy in vpx_version.h.
   cp -p "${BUILD_ROOT}/${target}/vpx_version.h" "${HEADER_DIR}"
+
+  # Copy in Info.plist.
+  cp -p "${SCRIPT_DIR}/ios-Info.plist" "${FRAMEWORK_DIR}/Info.plist"
+
+  # Copy in module_map
+  mkdir "${FRAMEWORK_DIR}/Modules"
+  cp -p "${SCRIPT_DIR}/ios-module.modulemap" "${FRAMEWORK_DIR}/Modules/module.modulemap"
 
   vlog "Created fat library ${FRAMEWORK_DIR}/VPX containing:"
   for lib in ${lib_list}; do
