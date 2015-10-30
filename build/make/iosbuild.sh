@@ -166,7 +166,7 @@ build_framework() {
 
   # Build the fat library.
   ${LIPO} -create ${lib_list} -output ${FRAMEWORK_DIR}/VPX
-  install_name_tool -change '@executable_path/libvpx.2.dylib' '@rpath/VPX.framework/VPX' ${FRAMEWORK_DIR}/VPX
+  install_name_tool -id '@rpath/VPX.framework/VPX' ${FRAMEWORK_DIR}/VPX
 
   # Create the vpx_config.h shim that allows usage of vpx_config.h from
   # within VPX.framework.
