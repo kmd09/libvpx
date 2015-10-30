@@ -159,7 +159,7 @@ build_framework() {
   for target in ${targets}; do
     build_target "${target}"
     target_dist_dir="${BUILD_ROOT}/${target}/${DIST_DIR}"
-    if [ "$ENABLE_SHARED" == "yes"]; then
+    if [ "$ENABLE_SHARED" == "yes" ]; then
       local suffix="dylib"
     else
       local suffix="a"
@@ -175,7 +175,6 @@ build_framework() {
 
   # Build the fat library.
   ${LIPO} -create ${lib_list} -output ${FRAMEWORK_DIR}/VPX
-  install_name_tool -id '@rpath/VPX.framework/VPX' ${FRAMEWORK_DIR}/VPX
 
   # Create the vpx_config.h shim that allows usage of vpx_config.h from
   # within VPX.framework.
@@ -184,7 +183,10 @@ build_framework() {
   # Copy in vpx_version.h.
   cp -p "${BUILD_ROOT}/${target}/vpx_version.h" "${HEADER_DIR}"
 
-  if [ "$ENABLE_SHARED" == "yes"]; then
+  if [ "$ENABLE_SHARED" == "yes" ]; then
+    # Adjust the dylib's name so dynamic linking in apps works as expected
+    install_name_tool -id '@rpath/VPX.framework/VPX' ${FRAMEWORK_DIR}/VPX
+
     # Copy in Info.plist.
     cp -p "${SCRIPT_DIR}/ios-Info.plist" "${FRAMEWORK_DIR}/Info.plist"
 
