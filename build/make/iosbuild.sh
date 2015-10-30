@@ -41,6 +41,7 @@ build_target() {
   local target="$1"
   local old_pwd="$(pwd)"
   local target_specific_flags=""
+  local shared_flags=""
 
   vlog "***Building target: ${target}***"
 
@@ -51,9 +52,13 @@ build_target() {
       ;;
   esac
 
+  if [ "$ENABLE_SHARED" == "yes" ]; then
+    shared_flags="--enable-shared"
+  fi
+
   mkdir "${target}"
   cd "${target}"
-  eval "${LIBVPX_SOURCE_DIR}/configure" --target="${target}" --enable-shared \
+  eval "${LIBVPX_SOURCE_DIR}/configure" --target="${target}" ${shared_flags} \
     ${CONFIGURE_ARGS} ${EXTRA_CONFIGURE_ARGS} ${target_specific_flags} \
     ${devnull}
   export DIST_DIR
@@ -154,8 +159,12 @@ build_framework() {
   for target in ${targets}; do
     build_target "${target}"
     target_dist_dir="${BUILD_ROOT}/${target}/${DIST_DIR}"
-    #lib_list="${lib_list} ${target_dist_dir}/lib/libvpx.a"
-    lib_list="${lib_list} ${target_dist_dir}/lib/libvpx.dylib"
+    if [ "$ENABLE_SHARED" == "yes"]; then
+      local suffix="dylib"
+    else
+      local suffix="a"
+    fi
+    lib_list="${lib_list} ${target_dist_dir}/lib/libvpx.$suffix"
   done
 
   cd "${ORIG_PWD}"
@@ -175,12 +184,14 @@ build_framework() {
   # Copy in vpx_version.h.
   cp -p "${BUILD_ROOT}/${target}/vpx_version.h" "${HEADER_DIR}"
 
-  # Copy in Info.plist.
-  cp -p "${SCRIPT_DIR}/ios-Info.plist" "${FRAMEWORK_DIR}/Info.plist"
+  if [ "$ENABLE_SHARED" == "yes"]; then
+    # Copy in Info.plist.
+    cp -p "${SCRIPT_DIR}/ios-Info.plist" "${FRAMEWORK_DIR}/Info.plist"
 
-  # Copy in module_map
-  mkdir "${FRAMEWORK_DIR}/Modules"
-  cp -p "${SCRIPT_DIR}/ios-module.modulemap" "${FRAMEWORK_DIR}/Modules/module.modulemap"
+    # Copy in module_map
+    mkdir "${FRAMEWORK_DIR}/Modules"
+    cp -p "${SCRIPT_DIR}/ios-module.modulemap" "${FRAMEWORK_DIR}/Modules/module.modulemap"
+  fi
 
   vlog "Created fat library ${FRAMEWORK_DIR}/VPX containing:"
   for lib in ${lib_list}; do
@@ -210,6 +221,7 @@ iosbuild_usage() {
 cat << EOF
   Usage: ${0##*/} [arguments]
     --help: Display this message and exit.
+    --enable-shared: Build a dynamic framework for use on iOS 8 or later.
     --extra-configure-args <args>: Extra args to pass when configuring libvpx.
     --preserve-build-output: Do not delete the build directory.
     --show-build-output: Show output from each library build.
@@ -244,6 +256,9 @@ while [ -n "$1" ]; do
     --help)
       iosbuild_usage
       exit
+      ;;
+    --enable-shared)
+      ENABLE_SHARED=yes
       ;;
     --preserve-build-output)
       PRESERVE_BUILD_OUTPUT=yes
@@ -283,6 +298,7 @@ cat << EOF
   ORIG_PWD=${ORIG_PWD}
   PRESERVE_BUILD_OUTPUT=${PRESERVE_BUILD_OUTPUT}
   TARGETS="${TARGETS}"
+  ENABLE_SHARED=${ENABLE_SHARED}
 EOF
 fi
 
