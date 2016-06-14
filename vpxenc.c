@@ -1099,8 +1099,8 @@ static void open_input_file(struct VpxInputContext *input) {
              input->detect.buf[2] == 'N' &&
              input->detect.buf[3] == 'G') {
     input->file_type = FILE_TYPE_PNG;
-    input->width = 1280; // some crappy defaults
-    input->height = 940;
+    //input->width = 1280; // some crappy defaults
+    //input->height = 940;
     fseek(input->file, 0, SEEK_SET);
   } else {
     input->file_type = FILE_TYPE_RAW;
