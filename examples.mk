@@ -18,8 +18,20 @@ LIBYUV_SRCS +=  third_party/libyuv/include/libyuv/basic_types.h  \
                 third_party/libyuv/include/libyuv/row.h  \
                 third_party/libyuv/include/libyuv/scale.h  \
                 third_party/libyuv/include/libyuv/scale_row.h  \
+                third_party/libyuv/source/convert.cc \
+                third_party/libyuv/source/convert_argb.cc \
+                third_party/libyuv/source/convert_from.cc \
+                third_party/libyuv/source/convert_from_argb.cc \
+                third_party/libyuv/source/convert_jpeg.cc \
+                third_party/libyuv/source/convert_to_argb.cc \
+                third_party/libyuv/source/convert_to_i420.cc \
                 third_party/libyuv/source/cpu_id.cc \
                 third_party/libyuv/source/planar_functions.cc \
+                third_party/libyuv/source/rotate.cc \
+                third_party/libyuv/source/rotate_any.cc \
+                third_party/libyuv/source/rotate_argb.cc \
+                third_party/libyuv/source/rotate_common.cc \
+                third_party/libyuv/source/rotate_gcc.cc \
                 third_party/libyuv/source/row_any.cc \
                 third_party/libyuv/source/row_common.cc \
                 third_party/libyuv/source/row_gcc.cc \
@@ -35,6 +47,7 @@ LIBYUV_SRCS +=  third_party/libyuv/include/libyuv/basic_types.h  \
                 third_party/libyuv/source/scale_neon.cc \
                 third_party/libyuv/source/scale_neon64.cc \
                 third_party/libyuv/source/scale_win.cc \
+                third_party/libyuv/source/video_common.cc \
 
 LIBWEBM_COMMON_SRCS += third_party/libwebm/common/hdr_util.cc \
                        third_party/libwebm/common/hdr_util.h \
@@ -60,6 +73,9 @@ ifeq ($(CONFIG_WEBM_IO),yes)
   INC_PATH-yes += $(SRC_PATH_BARE)/third_party/libwebm
 endif
 
+# Add compile flags and incldue path for libpng.
+LDFLAGS += -L/usr/local/lib -lpng
+INC_PATH-yes += /usr/local/include
 
 # List of examples to build. UTILS are tools meant for distribution
 # while EXAMPLES demonstrate specific portions of the API.

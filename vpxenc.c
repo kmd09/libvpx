@@ -23,6 +23,11 @@
 #include "third_party/libyuv/include/libyuv/scale.h"
 #endif
 
+#include <png.h>
+#if CONFIG_LIBYUV
+#include "third_party/libyuv/include/libyuv/convert.h"
+#endif
+
 #include "vpx/vpx_encoder.h"
 #if CONFIG_DECODERS
 #include "vpx/vpx_decoder.h"
@@ -99,6 +104,76 @@ static void warn_or_exit_on_error(vpx_codec_ctx_t *ctx, int fatal,
   va_end(ap);
 }
 
+static void user_error_fn_png(png_structp png_ptr, png_const_charp error_msg)
+{
+  printf("libpng error: %s\n", error_msg);
+}
+
+static void user_warning_fn_png(png_structp png_ptr, png_const_charp warning_msg)
+{
+  printf("libpng warning: %s\n", warning_msg);
+}
+
+static int read_png_frame(struct VpxInputContext *input_ctx, vpx_image_t *img) {
+  png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING,
+    (png_voidp)NULL, user_error_fn_png, user_warning_fn_png);
+  if (!png_ptr) {
+    return 0;
+  }
+
+  png_infop info_ptr = png_create_info_struct(png_ptr);
+  if (!info_ptr)  {
+    png_destroy_read_struct(&png_ptr, (png_infopp)NULL, (png_infopp)NULL);
+    return 0;
+  }
+
+  png_infop end_ptr = png_create_info_struct(png_ptr);
+  if (!end_ptr)  {
+    png_destroy_read_struct(&png_ptr, &info_ptr, (png_infopp)NULL);
+    return 0;
+  }
+
+  png_init_io(png_ptr, input_ctx->file);
+  png_read_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+
+  int width = png_get_image_width(png_ptr, info_ptr);
+  int height = png_get_image_height(png_ptr, info_ptr);
+
+  png_bytep *row_pointers = png_get_rows(png_ptr, info_ptr);
+  
+  vpx_img_free(img);
+  memset(img, 0, sizeof(vpx_image_t));
+  vpx_img_alloc(img, VPX_IMG_FMT_I420, width, height, 16);
+  
+  #if CONFIG_LIBYUV
+    unsigned char *rgbdata = malloc(width * height * 4);
+    for (int y = 0; y < height; y++) {
+      memcpy(rgbdata + y * width * 4, row_pointers[y], width * 4);
+    }
+    ABGRToI420((uint8*)rgbdata,
+                width * 4,
+                (uint8*)img->planes[VPX_PLANE_Y],
+                img->stride[VPX_PLANE_Y],
+                (uint8*)img->planes[VPX_PLANE_U],
+                img->stride[VPX_PLANE_U],
+                (uint8*)img->planes[VPX_PLANE_V],
+                img->stride[VPX_PLANE_V],
+                width,
+                height);
+    free(rgbdata);
+  #else
+    printf("PNG input failed: libyuv disabled in this configuration. \n"
+          "To enable, configure with --enable-libyuv\n");
+    exit(1);
+  #endif
+
+  //png_read_end(png_ptr, end_ptr);
+
+  png_destroy_read_struct(&png_ptr, &info_ptr, &end_ptr);
+
+  return 1;
+}
+
 static int read_frame(struct VpxInputContext *input_ctx, vpx_image_t *img) {
   FILE *f = input_ctx->file;
   y4m_input *y4m = &input_ctx->y4m;
@@ -106,6 +181,9 @@ static int read_frame(struct VpxInputContext *input_ctx, vpx_image_t *img) {
 
   if (input_ctx->file_type == FILE_TYPE_Y4M) {
     if (y4m_input_fetch_frame(y4m, f, img) < 1)
+      return 0;
+  } else if (input_ctx->file_type == FILE_TYPE_PNG) {
+    if (read_png_frame(input_ctx, img) < 1)
       return 0;
   } else {
     shortread = read_yuv_frame(input_ctx, img);
@@ -1016,6 +1094,14 @@ static void open_input_file(struct VpxInputContext *input) {
       fatal("Unsupported Y4M stream.");
   } else if (input->detect.buf_read == 4 && fourcc_is_ivf(input->detect.buf)) {
     fatal("IVF is not supported as input.");
+  } else if (input->detect.buf[0] == (char)0x89 &&
+             input->detect.buf[1] == 'P' &&
+             input->detect.buf[2] == 'N' &&
+             input->detect.buf[3] == 'G') {
+    input->file_type = FILE_TYPE_PNG;
+    input->width = 320; // some crappy defaults
+    input->height = 235;
+    fseek(input->file, 0, SEEK_SET);
   } else {
     input->file_type = FILE_TYPE_RAW;
   }
@@ -1360,6 +1446,7 @@ static const char* file_type_to_string(enum VideoFileType t) {
   switch (t) {
     case FILE_TYPE_RAW: return "RAW";
     case FILE_TYPE_Y4M: return "Y4M";
+    case FILE_TYPE_PNG: return "PNG";
     default: return "Other";
   }
 }
@@ -1581,6 +1668,15 @@ static void encode_frame(struct stream_state *stream,
   vpx_codec_pts_t frame_start, next_frame_start;
   struct vpx_codec_enc_cfg *cfg = &stream->config.cfg;
   struct vpx_usec_timer timer;
+
+  if (img) {
+    if (img->d_w != cfg->g_w || img->d_h != cfg->g_h) {
+      cfg->g_w = img->d_w;
+      cfg->g_h = img->d_h;
+      int ok = vpx_codec_enc_config_set(&stream->encoder, cfg);
+      printf("ok is %d wh is %d %d\n", ok, img->d_w, img->d_h);
+    }
+  }
 
   frame_start = (cfg->g_timebase.den * (int64_t)(frames_in - 1)
                  * global->framerate.den)

@@ -68,7 +68,8 @@ enum VideoFileType {
   FILE_TYPE_RAW,
   FILE_TYPE_IVF,
   FILE_TYPE_Y4M,
-  FILE_TYPE_WEBM
+  FILE_TYPE_WEBM,
+  FILE_TYPE_PNG
 };
 
 struct FileTypeDetectionBuffer {
