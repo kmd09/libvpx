@@ -1758,13 +1758,10 @@ static void encode_frame(struct stream_state *stream,
 #endif
   }
 
-  // @FIXME hack - force the ref frame to always update
-  vpx_enc_frame_flags_t flags = VP8_EFLAG_FORCE_GF | VP8_EFLAG_FORCE_ARF;
-
   vpx_usec_timer_start(&timer);
   vpx_codec_encode(&stream->encoder, img, frame_start,
                    (unsigned long)(next_frame_start - frame_start),
-                   flags, global->deadline);
+                   0, global->deadline);
   vpx_usec_timer_mark(&timer);
   stream->cx_time += vpx_usec_timer_elapsed(&timer);
   ctx_exit_on_error(&stream->encoder, "Stream %d: Failed to encode frame",
