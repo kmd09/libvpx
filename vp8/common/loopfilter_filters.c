@@ -30,9 +30,33 @@ static int vp8_signed_char_clamp2(int t)
     return t;
 }
 
+static int vp8_signed_char_clamp2_low(int t)
+{
+    t = (t < -128 ? -128 : t);
+    return t;
+}
+
+static int vp8_signed_char_clamp2_high(int t)
+{
+    t = (t > 127 ? 127 : t);
+    return t;
+}
+
 static int vp8_unsigned_char_clamp(int t)
 {
     t = (t < 0 ? 0 : t);
+    t = (t > 255 ? 255 : t);
+    return t;
+}
+
+static int vp8_unsigned_char_clamp_low(int t)
+{
+    t = (t < 0 ? 0 : t);
+    return t;
+}
+
+static int vp8_unsigned_char_clamp_high(int t)
+{
     t = (t > 255 ? 255 : t);
     return t;
 }
@@ -207,26 +231,49 @@ static void vp8_mbfilter(signed char mask, uc hev,
     filter_value &= ~(signed char)hev;
     Filter2 = filter_value;
 
-    /* roughly 3/7th difference across boundary */
-    u = vp8_signed_char_clamp2((63 + Filter2 * 27) >> 7);
-    s = vp8_unsigned_char_clamp(qs0 - u);
-    *oq0 = s;
-    s = vp8_unsigned_char_clamp(ps0 + u);
-    *op0 = s;
+    if (filter_value > 0) {
+        /* roughly 3/7th difference across boundary */
+        u = vp8_signed_char_clamp2_high((63 + Filter2 * 27) >> 7);
+        s = vp8_unsigned_char_clamp_low(qs0 - u);
+        *oq0 = s;
+        s = vp8_unsigned_char_clamp_high(ps0 + u);
+        *op0 = s;
 
-    /* roughly 2/7th difference across boundary */
-    u = vp8_signed_char_clamp2((63 + Filter2 * 18) >> 7);
-    s = vp8_unsigned_char_clamp(qs1 - u);
-    *oq1 = s;
-    s = vp8_unsigned_char_clamp(ps1 + u);
-    *op1 = s;
+        /* roughly 2/7th difference across boundary */
+        u = vp8_signed_char_clamp2_high((63 + Filter2 * 18) >> 7);
+        s = vp8_unsigned_char_clamp_low(qs1 - u);
+        *oq1 = s;
+        s = vp8_unsigned_char_clamp_high(ps1 + u);
+        *op1 = s;
 
-    /* roughly 1/7th difference across boundary */
-    u = vp8_signed_char_clamp2((63 + Filter2 * 9) >> 7);
-    s = vp8_unsigned_char_clamp(qs2 - u);
-    *oq2 = s;
-    s = vp8_unsigned_char_clamp(ps2 + u);
-    *op2 = s;
+        /* roughly 1/7th difference across boundary */
+        u = vp8_signed_char_clamp2_high((63 + Filter2 * 9) >> 7);
+        s = vp8_unsigned_char_clamp_low(qs2 - u);
+        *oq2 = s;
+        s = vp8_unsigned_char_clamp_high(ps2 + u);
+        *op2 = s;
+    } else {
+        /* roughly 3/7th difference across boundary */
+        u = vp8_signed_char_clamp2_low((63 + Filter2 * 27) >> 7);
+        s = vp8_unsigned_char_clamp_high(qs0 - u);
+        *oq0 = s;
+        s = vp8_unsigned_char_clamp_low(ps0 + u);
+        *op0 = s;
+
+        /* roughly 2/7th difference across boundary */
+        u = vp8_signed_char_clamp2_low((63 + Filter2 * 18) >> 7);
+        s = vp8_unsigned_char_clamp_high(qs1 - u);
+        *oq1 = s;
+        s = vp8_unsigned_char_clamp_low(ps1 + u);
+        *op1 = s;
+
+        /* roughly 1/7th difference across boundary */
+        u = vp8_signed_char_clamp2_low((63 + Filter2 * 9) >> 7);
+        s = vp8_unsigned_char_clamp_high(qs2 - u);
+        *oq2 = s;
+        s = vp8_unsigned_char_clamp_low(ps2 + u);
+        *op2 = s;
+    }
 }
 
 void vp8_mbloop_filter_horizontal_edge_c
