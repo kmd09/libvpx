@@ -91,47 +91,47 @@ static void vp8_filter(signed char mask, uc hev, uc *op1,
         uc *op0, uc *oq0, uc *oq1)
 
 {
-    signed char ps0, qs0;
-    signed char ps1, qs1;
-    signed char filter_value, Filter1, Filter2;
-    signed char u;
+    int ps0, qs0;
+    int ps1, qs1;
+    int filter_value, Filter1, Filter2;
+    int u;
 
-    ps1 = (signed char) * op1 ^ 0x80;
-    ps0 = (signed char) * op0 ^ 0x80;
-    qs0 = (signed char) * oq0 ^ 0x80;
-    qs1 = (signed char) * oq1 ^ 0x80;
+    ps1 = * op1;
+    ps0 = * op0;
+    qs0 = * oq0;
+    qs1 = * oq1;
 
     /* add outer taps if we have high edge variance */
-    filter_value = vp8_signed_char_clamp(ps1 - qs1);
-    filter_value &= hev;
+    filter_value = vp8_signed_char_clamp2(ps1 - qs1);
+    filter_value &= (signed char)hev;
 
     /* inner taps */
-    filter_value = vp8_signed_char_clamp(filter_value + 3 * (qs0 - ps0));
+    filter_value = vp8_signed_char_clamp2(filter_value + 3 * (qs0 - ps0));
     filter_value &= mask;
 
     /* save bottom 3 bits so that we round one side +4 and the other +3
      * if it equals 4 we'll set to adjust by -1 to account for the fact
      * we'd round 3 the other way
      */
-    Filter1 = vp8_signed_char_clamp(filter_value + 4);
-    Filter2 = vp8_signed_char_clamp(filter_value + 3);
+    Filter1 = vp8_signed_char_clamp2(filter_value + 4);
+    Filter2 = vp8_signed_char_clamp2(filter_value + 3);
     Filter1 >>= 3;
     Filter2 >>= 3;
-    u = vp8_signed_char_clamp(qs0 - Filter1);
-    *oq0 = u ^ 0x80;
-    u = vp8_signed_char_clamp(ps0 + Filter2);
-    *op0 = u ^ 0x80;
+    u = vp8_unsigned_char_clamp(qs0 - Filter1);
+    *oq0 = u;
+    u = vp8_unsigned_char_clamp(ps0 + Filter2);
+    *op0 = u;
     filter_value = Filter1;
 
     /* outer tap adjustments */
     filter_value += 1;
     filter_value >>= 1;
-    filter_value &= ~hev;
+    filter_value &= ~(signed char)hev;
 
-    u = vp8_signed_char_clamp(qs1 - filter_value);
-    *oq1 = u ^ 0x80;
-    u = vp8_signed_char_clamp(ps1 + filter_value);
-    *op1 = u ^ 0x80;
+    u = vp8_unsigned_char_clamp(qs1 - filter_value);
+    *oq1 = u;
+    u = vp8_unsigned_char_clamp(ps1 + filter_value);
+    *op1 = u;
 
 }
 void vp8_loop_filter_horizontal_edge_c
