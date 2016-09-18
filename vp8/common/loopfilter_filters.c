@@ -22,6 +22,21 @@ static signed char vp8_signed_char_clamp(int t)
     return (signed char) t;
 }
 
+// experiment -- is this faster in emscripten?
+static int vp8_signed_char_clamp2(int t)
+{
+    t = (t < -128 ? -128 : t);
+    t = (t > 127 ? 127 : t);
+    return t;
+}
+
+static int vp8_unsigned_char_clamp(int t)
+{
+    t = (t < 0 ? 0 : t);
+    t = (t > 255 ? 255 : t);
+    return t;
+}
+
 
 /* should we apply any filter at all ( 11111111 yes, 00000000 no) */
 static signed char vp8_filter_mask(uc limit, uc blimit,
@@ -161,56 +176,57 @@ void vp8_loop_filter_vertical_edge_c
 static void vp8_mbfilter(signed char mask, uc hev,
                            uc *op2, uc *op1, uc *op0, uc *oq0, uc *oq1, uc *oq2)
 {
-    signed char s, u;
-    signed char filter_value, Filter1, Filter2;
-    signed char ps2 = (signed char) * op2 ^ 0x80;
-    signed char ps1 = (signed char) * op1 ^ 0x80;
-    signed char ps0 = (signed char) * op0 ^ 0x80;
-    signed char qs0 = (signed char) * oq0 ^ 0x80;
-    signed char qs1 = (signed char) * oq1 ^ 0x80;
-    signed char qs2 = (signed char) * oq2 ^ 0x80;
+    int s, u;
+    int filter_value, Filter1, Filter2;
+
+    int ps2 = * op2;
+    int ps1 = * op1;
+    int ps0 = * op0;
+    int qs0 = * oq0;
+    int qs1 = * oq1;
+    int qs2 = * oq2;
 
     /* add outer taps if we have high edge variance */
-    filter_value = vp8_signed_char_clamp(ps1 - qs1);
-    filter_value = vp8_signed_char_clamp(filter_value + 3 * (qs0 - ps0));
+    filter_value = vp8_signed_char_clamp2(ps1 - qs1);
+    filter_value = vp8_signed_char_clamp2(filter_value + 3 * (qs0 - ps0));
     filter_value &= mask;
 
     Filter2 = filter_value;
-    Filter2 &= hev;
+    Filter2 &= (signed char)hev;
 
     /* save bottom 3 bits so that we round one side +4 and the other +3 */
-    Filter1 = vp8_signed_char_clamp(Filter2 + 4);
-    Filter2 = vp8_signed_char_clamp(Filter2 + 3);
+    Filter1 = vp8_signed_char_clamp2(Filter2 + 4);
+    Filter2 = vp8_signed_char_clamp2(Filter2 + 3);
     Filter1 >>= 3;
     Filter2 >>= 3;
-    qs0 = vp8_signed_char_clamp(qs0 - Filter1);
-    ps0 = vp8_signed_char_clamp(ps0 + Filter2);
+    qs0 = vp8_unsigned_char_clamp(qs0 - Filter1);
+    ps0 = vp8_unsigned_char_clamp(ps0 + Filter2);
 
 
     /* only apply wider filter if not high edge variance */
-    filter_value &= ~hev;
+    filter_value &= ~(signed char)hev;
     Filter2 = filter_value;
 
     /* roughly 3/7th difference across boundary */
-    u = vp8_signed_char_clamp((63 + Filter2 * 27) >> 7);
-    s = vp8_signed_char_clamp(qs0 - u);
-    *oq0 = s ^ 0x80;
-    s = vp8_signed_char_clamp(ps0 + u);
-    *op0 = s ^ 0x80;
+    u = vp8_signed_char_clamp2((63 + Filter2 * 27) >> 7);
+    s = vp8_unsigned_char_clamp(qs0 - u);
+    *oq0 = s;
+    s = vp8_unsigned_char_clamp(ps0 + u);
+    *op0 = s;
 
     /* roughly 2/7th difference across boundary */
-    u = vp8_signed_char_clamp((63 + Filter2 * 18) >> 7);
-    s = vp8_signed_char_clamp(qs1 - u);
-    *oq1 = s ^ 0x80;
-    s = vp8_signed_char_clamp(ps1 + u);
-    *op1 = s ^ 0x80;
+    u = vp8_signed_char_clamp2((63 + Filter2 * 18) >> 7);
+    s = vp8_unsigned_char_clamp(qs1 - u);
+    *oq1 = s;
+    s = vp8_unsigned_char_clamp(ps1 + u);
+    *op1 = s;
 
     /* roughly 1/7th difference across boundary */
-    u = vp8_signed_char_clamp((63 + Filter2 * 9) >> 7);
-    s = vp8_signed_char_clamp(qs2 - u);
-    *oq2 = s ^ 0x80;
-    s = vp8_signed_char_clamp(ps2 + u);
-    *op2 = s ^ 0x80;
+    u = vp8_signed_char_clamp2((63 + Filter2 * 9) >> 7);
+    s = vp8_unsigned_char_clamp(qs2 - u);
+    *oq2 = s;
+    s = vp8_unsigned_char_clamp(ps2 + u);
+    *op2 = s;
 }
 
 void vp8_mbloop_filter_horizontal_edge_c
