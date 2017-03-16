@@ -20,6 +20,19 @@ static signed char vp8_signed_char_clamp(int t) {
   return (signed char)t;
 }
 
+#ifdef __EMSCRIPTEN__
+static int vp8_signed_int_clamp(int t) {
+  t = (t < -128 ? -128 : t);
+  t = (t > 127 ? 127 : t);
+  return t;
+}
+static int vp8_unsigned_int_clamp(int t) {
+  t = (t < 0 ? 0 : t);
+  t = (t > 255 ? 255 : t);
+  return t;
+}
+#endif
+
 /* should we apply any filter at all ( 11111111 yes, 00000000 no) */
 static signed char vp8_filter_mask(uc limit, uc blimit, uc p3, uc p2, uc p1,
                                    uc p0, uc q0, uc q1, uc q2, uc q3) {
@@ -132,6 +145,60 @@ void vp8_loop_filter_vertical_edge_c(unsigned char *s, int p,
   } while (++i < count * 8);
 }
 
+#ifdef __EMSCRIPTEN__
+static void vp8_mbfilter(signed char mask, uc hev, uc *op2, uc *op1, uc *op0,
+                         uc *oq0, uc *oq1, uc *oq2) {
+  int s, u;
+  int filter_value, Filter1, Filter2;
+  int ps2 = *op2;
+  int ps1 = *op1;
+  int ps0 = *op0;
+  int qs0 = *oq0;
+  int qs1 = *oq1;
+  int qs2 = *oq2;
+
+  /* add outer taps if we have high edge variance */
+  if (mask) {
+    filter_value = vp8_signed_int_clamp(ps1 - qs1);
+    filter_value = vp8_signed_int_clamp(filter_value + 3 * (qs0 - ps0));
+  } else {
+    filter_value = 0;
+  }
+
+  if (hev) {
+    Filter2 = filter_value;
+
+    /* save bottom 3 bits so that we round one side +4 and the other +3 */
+    s = Filter2 + 4;
+    Filter1 = s > 127 ? 127 : s;
+    s = Filter2 + 3;
+    Filter2 = s > 127 ? 127 : s;
+    Filter1 >>= 3;
+    Filter2 >>= 3;
+    *oq0 = vp8_unsigned_int_clamp(qs0 - Filter1);
+    *op0 = vp8_unsigned_int_clamp(ps0 + Filter2);
+
+  } else {
+    /* only apply wider filter if not high edge variance */
+    Filter2 = filter_value;
+
+    /* roughly 3/7th difference across boundary */
+    u = (63 + Filter2 * 27) >> 7;
+    *oq0 = vp8_unsigned_int_clamp(qs0 - u);
+    *op0 = vp8_unsigned_int_clamp(ps0 + u);
+
+    /* roughly 2/7th difference across boundary */
+    u = (63 + Filter2 * 18) >> 7;
+    *oq1 = vp8_unsigned_int_clamp(qs1 - u);
+    *op1 = vp8_unsigned_int_clamp(ps1 + u);
+
+    /* roughly 1/7th difference across boundary */
+    u = (63 + Filter2 * 9) >> 7;
+    *oq2 = vp8_unsigned_int_clamp(qs2 - u);
+    *op2 = vp8_unsigned_int_clamp(ps2 + u);
+  }
+}
+#else
 static void vp8_mbfilter(signed char mask, uc hev, uc *op2, uc *op1, uc *op0,
                          uc *oq0, uc *oq1, uc *oq2) {
   signed char s, u;
@@ -184,6 +251,7 @@ static void vp8_mbfilter(signed char mask, uc hev, uc *op2, uc *op1, uc *op0,
   s = vp8_signed_char_clamp(ps2 + u);
   *op2 = s ^ 0x80;
 }
+#endif
 
 void vp8_mbloop_filter_horizontal_edge_c(unsigned char *s, int p,
                                          const unsigned char *blimit,
