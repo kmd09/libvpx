@@ -358,12 +358,20 @@ static void mt_decode_mb_rows(VP8D_COMP *pbi, MACROBLOCKD *xd,
     for (mb_col = 0; mb_col < pc->mb_cols; ++mb_col) {
       if (((mb_col - 1) % nsync) == 0) {
         pthread_mutex_t *mutex = &pbi->pmutex[mb_row];
-        protected_write(mutex, current_mb_col, mb_col - 1);
+        protected_write(mutex, current_mb_col, mb_col - 1
+#if defined(USE_COND_SIGNAL)
+          , &pbi->pcond[mb_row]
+#endif
+        );
       }
 
       if (mb_row && !(mb_col & (nsync - 1))) {
         pthread_mutex_t *mutex = &pbi->pmutex[mb_row - 1];
-        sync_read(mutex, mb_col, last_row_current_mb_col, nsync);
+        sync_read(mutex, mb_col, last_row_current_mb_col, nsync
+#if defined(USE_COND_SIGNAL)
+          , &pbi->pcond[mb_row - 1]
+#endif
+        );
       }
 
       /* Distance of MB to the various image edges.
@@ -549,7 +557,11 @@ static void mt_decode_mb_rows(VP8D_COMP *pbi, MACROBLOCKD *xd,
     }
 
     /* last MB of row is ready just after extension is done */
-    protected_write(&pbi->pmutex[mb_row], current_mb_col, mb_col + nsync);
+    protected_write(&pbi->pmutex[mb_row], current_mb_col, mb_col + nsync
+#if defined(USE_COND_SIGNAL)
+      , &pbi->pcond[mb_row]
+#endif
+    );
 
     ++xd->mode_info_context; /* skip prediction column */
     xd->up_available = 1;
@@ -659,6 +671,18 @@ void vp8mt_de_alloc_temp_buffers(VP8D_COMP *pbi, int mb_rows) {
     pbi->pmutex = NULL;
   }
 
+#if defined(USE_COND_SIGNAL)
+  /* De-allocate cond */
+  if (pbi->pcond != NULL) {
+    for (i = 0; i < mb_rows; ++i) {
+      pthread_cond_destroy(&pbi->pcond[i]);
+    }
+
+    vpx_free(pbi->pcond);
+    pbi->pcond = NULL;
+  }
+#endif
+
   vpx_free(pbi->mt_current_mb_col);
   pbi->mt_current_mb_col = NULL;
 
@@ -750,6 +774,15 @@ void vp8mt_alloc_temp_buffers(VP8D_COMP *pbi, int width, int prev_mb_rows) {
         pthread_mutex_init(&pbi->pmutex[i], NULL);
       }
     }
+#if defined(USE_COND_SIGNAL)
+    CHECK_MEM_ERROR(pbi->pcond,
+                    vpx_malloc(sizeof(*pbi->pcond) * pc->mb_rows));
+    if (pbi->pcond) {
+      for (i = 0; i < pc->mb_rows; ++i) {
+        pthread_cond_init(&pbi->pcond[i], NULL);
+      }
+    }
+#endif
 
     /* Allocate an int for each mb row. */
     CALLOC_ARRAY(pbi->mt_current_mb_col, pc->mb_rows);
@@ -795,7 +828,11 @@ void vp8_decoder_remove_threads(VP8D_COMP *pbi) {
   /* shutdown MB Decoding thread; */
   if (protected_read(&pbi->mt_mutex, &pbi->b_multithreaded_rd)) {
     int i;
-    protected_write(&pbi->mt_mutex, &pbi->b_multithreaded_rd, 0);
+    protected_write(&pbi->mt_mutex, &pbi->b_multithreaded_rd, 0
+#if defined(USE_COND_SIGNAL)
+      , NULL
+#endif
+    );
 
     /* allow all threads to exit */
     for (i = 0; i < pbi->allocated_decoding_thread_count; ++i) {

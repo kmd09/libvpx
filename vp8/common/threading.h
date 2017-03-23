@@ -197,6 +197,11 @@ static inline int sem_destroy(sem_t *sem) {
 #endif
 #endif
 
+#ifdef __EMSCRIPTEN__
+#define USE_MUTEX_LOCK 1
+#define USE_COND_SIGNAL 1
+#endif
+
 #include "vpx_util/vpx_thread.h"
 
 static INLINE int protected_read(pthread_mutex_t *const mutex, const int *p) {
@@ -213,18 +218,44 @@ static INLINE int protected_read(pthread_mutex_t *const mutex, const int *p) {
 
 static INLINE void sync_read(pthread_mutex_t *const mutex, int mb_col,
                              const int *last_row_current_mb_col,
-                             const int nsync) {
+                             const int nsync
+#if defined(USE_COND_SIGNAL)
+                             , pthread_cond_t *const cond
+#endif
+                           ) {
+#if defined(USE_COND_SIGNAL)
+  pthread_mutex_lock(mutex);
+  while (1) {
+    int ret = *last_row_current_mb_col;
+    if (mb_col > (ret - nsync)) {
+      pthread_cond_wait(cond, mutex);
+    } else {
+      break;
+    }
+  }
+  pthread_mutex_unlock(mutex);
+#else
   while (mb_col > (protected_read(mutex, last_row_current_mb_col) - nsync)) {
     x86_pause_hint();
     thread_sleep(0);
   }
+  #endif
 }
 
-static INLINE void protected_write(pthread_mutex_t *mutex, int *p, int v) {
+static INLINE void protected_write(pthread_mutex_t *mutex, int *p, int v
+#if defined(USE_COND_SIGNAL)
+                                   , pthread_cond_t *cond
+#endif
+) {
   (void)mutex;
 #if defined(USE_MUTEX_LOCK)
   pthread_mutex_lock(mutex);
   *p = v;
+#if defined(USE_COND_SIGNAL)
+  if (cond) {
+    pthread_cond_signal(cond);
+  }
+#endif
   pthread_mutex_unlock(mutex);
   return;
 #endif

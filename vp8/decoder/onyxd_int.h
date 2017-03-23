@@ -79,6 +79,9 @@ typedef struct VP8D_COMP {
   int *mt_current_mb_col; /* Each row remembers its already decoded column. */
   pthread_mutex_t *pmutex;
   pthread_mutex_t mt_mutex; /* mutex for b_multithreaded_rd */
+#if defined(USE_COND_SIGNAL)
+  pthread_cond_t *pcond;
+#endif
 
   unsigned char **mt_yabove_row; /* mb_rows x width */
   unsigned char **mt_uabove_row;
