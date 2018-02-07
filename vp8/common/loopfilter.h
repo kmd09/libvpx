@@ -96,6 +96,11 @@ void vp8_loop_filter_row_simple(struct VP8Common *cm,
                                 int post_ystride, int post_uvstride,
                                 unsigned char *y_ptr, unsigned char *u_ptr,
                                 unsigned char *v_ptr);
+
+#ifdef EMSCRIPTEN
+void initialize_clamp_lut(void);
+#endif
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

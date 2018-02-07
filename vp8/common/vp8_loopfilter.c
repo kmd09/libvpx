@@ -78,6 +78,10 @@ void vp8_loop_filter_init(VP8_COMMON *cm) {
   loop_filter_info_n *lfi = &cm->lf_info;
   int i;
 
+#ifdef EMSCRIPTEN
+  initialize_clamp_lut();
+#endif
+
   /* init limits for given sharpness*/
   vp8_loop_filter_update_sharpness(lfi, cm->sharpness_level);
   cm->last_sharpness_level = cm->sharpness_level;

@@ -20,6 +20,43 @@ static signed char vp8_signed_char_clamp(int t) {
   return (signed char)t;
 }
 
+#ifdef EMSCRIPTEN
+
+// asm.js and wasm lack native clamping primitives;
+// a lookup table seems faster than branching here.
+static char *clamp_lut_signed = NULL;
+static unsigned char *clamp_lut_unsigned = NULL;
+
+// cover all the multiplication possibilities of 8-bit signed vals
+static const int clamp_lut_size = 32768;
+static const int clamp_lut_offset = 16384;
+
+// Call from vp8_loop_filter_init() to set up the lut.
+void initialize_clamp_lut(void) {
+  if (!clamp_lut_signed) {
+    clamp_lut_signed = malloc(sizeof(char) * clamp_lut_size);
+    for (int i = 0; i < clamp_lut_size; i++) {
+      int j = i - clamp_lut_offset;
+      clamp_lut_signed[i] = (j < -128 ? -128 : (j > 127 ? 127 : j));
+    }
+  }
+  if (!clamp_lut_unsigned) {
+    clamp_lut_unsigned = malloc(sizeof(unsigned char) * clamp_lut_size);
+    for (int i = 0; i < clamp_lut_size; i++) {
+      clamp_lut_unsigned[i] = (i > 255 ? 255 : i);
+    }
+  }
+}
+
+static int vp8_int_clamp(int t) {
+  return clamp_lut_signed[t + clamp_lut_offset];
+}
+
+static int vp8_uint_clamp(int t) {
+  return clamp_lut_unsigned[t];
+}
+#endif
+
 /* should we apply any filter at all ( 11111111 yes, 00000000 no) */
 static signed char vp8_filter_mask(uc limit, uc blimit, uc p3, uc p2, uc p1,
                                    uc p0, uc q0, uc q1, uc q2, uc q3) {
@@ -42,6 +79,52 @@ static signed char vp8_hevmask(uc thresh, uc p1, uc p0, uc q0, uc q1) {
   return hev;
 }
 
+#ifdef EMSCRIPTEN
+static void vp8_filter(signed char mask, uc hev, uc *op1, uc *op0, uc *oq0,
+                       uc *oq1) {
+  int ps0, qs0;
+  int ps1, qs1;
+  int filter_value, Filter1, Filter2;
+  int u;
+
+  ps1 = *op1;
+  ps0 = *op0;
+  qs0 = *oq0;
+  qs1 = *oq1;
+
+  /* add outer taps if we have high edge variance */
+  filter_value = vp8_int_clamp(ps1 - qs1);
+  filter_value &= (int)(signed char)hev;
+
+  /* inner taps */
+  filter_value = vp8_int_clamp(filter_value + 3 * (qs0 - ps0));
+  filter_value &= mask;
+
+  /* save bottom 3 bits so that we round one side +4 and the other +3
+   * if it equals 4 we'll set it to adjust by -1 to account for the fact
+   * we'd round it by 3 the other way
+   */
+  Filter1 = vp8_int_clamp(filter_value + 4);
+  Filter2 = vp8_int_clamp(filter_value + 3);
+  Filter1 >>= 3;
+  Filter2 >>= 3;
+  u = vp8_uint_clamp(qs0 - Filter1);
+  *oq0 = u;
+  u = vp8_uint_clamp(ps0 + Filter2);
+  *op0 = u;
+  filter_value = Filter1;
+
+  /* outer tap adjustments */
+  filter_value += 1;
+  filter_value >>= 1;
+  filter_value &= ~(int)(signed char)hev;
+
+  u = vp8_uint_clamp(qs1 - filter_value);
+  *oq1 = u;
+  u = vp8_uint_clamp(ps1 + filter_value);
+  *op1 = u;
+}
+#else
 static void vp8_filter(signed char mask, uc hev, uc *op1, uc *op0, uc *oq0,
                        uc *oq1) {
   signed char ps0, qs0;
@@ -86,6 +169,7 @@ static void vp8_filter(signed char mask, uc hev, uc *op1, uc *op0, uc *oq0,
   u = vp8_signed_char_clamp(ps1 + filter_value);
   *op1 = u ^ 0x80;
 }
+#endif
 
 static void loop_filter_horizontal_edge_c(unsigned char *s, int p, /* pitch */
                                           const unsigned char *blimit,
@@ -135,6 +219,60 @@ static void loop_filter_vertical_edge_c(unsigned char *s, int p,
   } while (++i < count * 8);
 }
 
+#ifdef EMSCRIPTEN
+static void vp8_mbfilter(signed char mask, uc hev, uc *op2, uc *op1, uc *op0,
+                         uc *oq0, uc *oq1, uc *oq2) {
+  int s, u;
+  int filter_value, Filter1, Filter2;
+  int ps2 = *op2;
+  int ps1 = *op1;
+  int ps0 = *op0;
+  int qs0 = *oq0;
+  int qs1 = *oq1;
+  int qs2 = *oq2;
+
+  /* add outer taps if we have high edge variance */
+  filter_value = vp8_int_clamp(ps1 - qs1);
+  filter_value = vp8_int_clamp(filter_value + 3 * (qs0 - ps0));
+  filter_value &= mask;
+
+  Filter2 = filter_value;
+  Filter2 &= (int)(signed char)hev;
+
+  /* save bottom 3 bits so that we round one side +4 and the other +3 */
+  Filter1 = vp8_int_clamp(Filter2 + 4);
+  Filter2 = vp8_int_clamp(Filter2 + 3);
+  Filter1 >>= 3;
+  Filter2 >>= 3;
+  qs0 = vp8_uint_clamp(qs0 - Filter1);
+  ps0 = vp8_uint_clamp(ps0 + Filter2);
+
+  /* only apply wider filter if not high edge variance */
+  filter_value &= ~(int)(signed char)hev;
+  Filter2 = filter_value;
+
+  /* roughly 3/7th difference across boundary */
+  u = vp8_int_clamp((63 + Filter2 * 27) >> 7);
+  s = vp8_uint_clamp(qs0 - u);
+  *oq0 = s;
+  s = vp8_uint_clamp(ps0 + u);
+  *op0 = s;
+
+  /* roughly 2/7th difference across boundary */
+  u = vp8_int_clamp((63 + Filter2 * 18) >> 7);
+  s = vp8_uint_clamp(qs1 - u);
+  *oq1 = s;
+  s = vp8_uint_clamp(ps1 + u);
+  *op1 = s;
+
+  /* roughly 1/7th difference across boundary */
+  u = vp8_int_clamp((63 + Filter2 * 9) >> 7);
+  s = vp8_uint_clamp(qs2 - u);
+  *oq2 = s;
+  s = vp8_uint_clamp(ps2 + u);
+  *op2 = s;
+}
+#else
 static void vp8_mbfilter(signed char mask, uc hev, uc *op2, uc *op1, uc *op0,
                          uc *oq0, uc *oq1, uc *oq2) {
   signed char s, u;
@@ -187,6 +325,7 @@ static void vp8_mbfilter(signed char mask, uc hev, uc *op2, uc *op1, uc *op0,
   s = vp8_signed_char_clamp(ps2 + u);
   *op2 = s ^ 0x80;
 }
+#endif
 
 static void mbloop_filter_horizontal_edge_c(unsigned char *s, int p,
                                             const unsigned char *blimit,
