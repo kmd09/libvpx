@@ -14,18 +14,14 @@
 
 typedef unsigned char uc;
 
-static signed char vp8_signed_char_clamp(int t) {
-  t = (t < -128 ? -128 : t);
-  t = (t > 127 ? 127 : t);
-  return (signed char)t;
-}
-
 #ifdef EMSCRIPTEN
 
 // asm.js and wasm lack native clamping primitives;
 // a lookup table seems faster than branching here.
 static char *clamp_lut_signed = NULL;
+static char *clamp_lut_signed_midpoint = NULL;
 static unsigned char *clamp_lut_unsigned = NULL;
+static unsigned char *clamp_lut_unsigned_midpoint = NULL;
 
 // cover all the multiplication possibilities of 8-bit signed vals
 static const int clamp_lut_size = 32768;
@@ -35,6 +31,7 @@ static const int clamp_lut_offset = 16384;
 void initialize_clamp_lut(void) {
   if (!clamp_lut_signed) {
     clamp_lut_signed = malloc(sizeof(char) * clamp_lut_size);
+    clamp_lut_signed_midpoint = clamp_lut_signed + clamp_lut_offset;
     for (int i = 0; i < clamp_lut_size; i++) {
       int j = i - clamp_lut_offset;
       clamp_lut_signed[i] = (j < -128 ? -128 : (j > 127 ? 127 : j));
@@ -42,6 +39,7 @@ void initialize_clamp_lut(void) {
   }
   if (!clamp_lut_unsigned) {
     clamp_lut_unsigned = malloc(sizeof(unsigned char) * clamp_lut_size);
+    clamp_lut_unsigned_midpoint = clamp_lut_unsigned + clamp_lut_offset;
     for (int i = 0; i < clamp_lut_size; i++) {
       int j = i - clamp_lut_offset;
       clamp_lut_unsigned[i] = (j < 0 ? 0 : (j > 255 ? 255 : j));
@@ -50,12 +48,25 @@ void initialize_clamp_lut(void) {
 }
 
 static int vp8_int_clamp(int t) {
-  return clamp_lut_signed[t + clamp_lut_offset];
+  return clamp_lut_signed_midpoint[t];
 }
 
 static int vp8_uint_clamp(int t) {
-  return clamp_lut_unsigned[t + clamp_lut_offset];
+  return clamp_lut_unsigned_midpoint[t];
 }
+
+static signed char vp8_signed_char_clamp(int t) {
+  return clamp_lut_signed_midpoint[t];
+}
+
+#else
+
+static signed char vp8_signed_char_clamp(int t) {
+  t = (t < -128 ? -128 : t);
+  t = (t > 127 ? 127 : t);
+  return (signed char)t;
+}
+
 #endif
 
 /* should we apply any filter at all ( 11111111 yes, 00000000 no) */
