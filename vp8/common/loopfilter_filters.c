@@ -27,6 +27,13 @@ static unsigned char *clamp_lut_unsigned_midpoint = NULL;
 static const int clamp_lut_size = 32768;
 static const int clamp_lut_offset = 16384;
 
+// also no native integer abs operation!
+// use a lut for abs() in range -256 to 255
+static unsigned char *abs_lut;
+static unsigned char *abs_lut_midpoint;
+static const int abs_lut_size = 512;
+static const int abs_lut_offset = 256;
+
 // Call from vp8_loop_filter_init() to set up the lut.
 void initialize_clamp_lut(void) {
   if (!clamp_lut_signed) {
@@ -45,6 +52,14 @@ void initialize_clamp_lut(void) {
       clamp_lut_unsigned[i] = (j < 0 ? 0 : (j > 255 ? 255 : j));
     }
   }
+  if (!abs_lut) {
+    abs_lut = malloc(sizeof(unsigned char) * abs_lut_size);
+    abs_lut_midpoint = abs_lut + abs_lut_offset;
+    for (int i = 0; i < abs_lut_size; i++) {
+      int j = i - abs_lut_offset;
+      abs_lut[i] = (j < 0) ? -j : j;
+    }
+  }
 }
 
 static int vp8_int_clamp(int t) {
@@ -59,6 +74,32 @@ static signed char vp8_signed_char_clamp(int t) {
   return clamp_lut_signed_midpoint[t];
 }
 
+static int vp8_abs(int val) {
+  return abs_lut_midpoint[val];
+}
+
+/* should we apply any filter at all ( 11111111 yes, 00000000 no) */
+static signed char vp8_filter_mask(uc limit, uc blimit, uc p3, uc p2, uc p1,
+                                   uc p0, uc q0, uc q1, uc q2, uc q3) {
+  signed char mask = 0;
+  mask |= (vp8_abs(p3 - p2) > limit);
+  mask |= (vp8_abs(p2 - p1) > limit);
+  mask |= (vp8_abs(p1 - p0) > limit);
+  mask |= (vp8_abs(q1 - q0) > limit);
+  mask |= (vp8_abs(q2 - q1) > limit);
+  mask |= (vp8_abs(q3 - q2) > limit);
+  mask |= (vp8_abs(p0 - q0) * 2 + vp8_abs(p1 - q1) / 2 > blimit);
+  return mask - 1;
+}
+
+/* is there high variance internal edge ( 11111111 yes, 00000000 no) */
+static signed char vp8_hevmask(uc thresh, uc p1, uc p0, uc q0, uc q1) {
+  signed char hev = 0;
+  hev |= (vp8_abs(p1 - p0) > thresh) * -1;
+  hev |= (vp8_abs(q1 - q0) > thresh) * -1;
+  return hev;
+}
+
 #else
 
 static signed char vp8_signed_char_clamp(int t) {
@@ -66,8 +107,6 @@ static signed char vp8_signed_char_clamp(int t) {
   t = (t > 127 ? 127 : t);
   return (signed char)t;
 }
-
-#endif
 
 /* should we apply any filter at all ( 11111111 yes, 00000000 no) */
 static signed char vp8_filter_mask(uc limit, uc blimit, uc p3, uc p2, uc p1,
@@ -90,6 +129,8 @@ static signed char vp8_hevmask(uc thresh, uc p1, uc p0, uc q0, uc q1) {
   hev |= (abs(q1 - q0) > thresh) * -1;
   return hev;
 }
+
+#endif
 
 #ifdef EMSCRIPTEN
 static void vp8_filter(signed char mask, uc hev, uc *op1, uc *op0, uc *oq0,
@@ -385,6 +426,17 @@ static void mbloop_filter_vertical_edge_c(unsigned char *s, int p,
   } while (++i < count * 8);
 }
 
+#ifdef EMSCRIPTEN
+static signed char vp8_simple_filter_mask(uc blimit, uc p1, uc p0, uc q0,
+                                          uc q1) {
+  /* Why does this cause problems for win32?
+   * error C2143: syntax error : missing ';' before 'type'
+   *  (void) limit;
+   */
+  signed char mask = (vp8_abs(p0 - q0) * 2 + vp8_abs(p1 - q1) / 2 <= blimit) * -1;
+  return mask;
+}
+#else
 /* should we apply any filter at all ( 11111111 yes, 00000000 no) */
 static signed char vp8_simple_filter_mask(uc blimit, uc p1, uc p0, uc q0,
                                           uc q1) {
@@ -395,6 +447,7 @@ static signed char vp8_simple_filter_mask(uc blimit, uc p1, uc p0, uc q0,
   signed char mask = (abs(p0 - q0) * 2 + abs(p1 - q1) / 2 <= blimit) * -1;
   return mask;
 }
+#endif
 
 static void vp8_simple_filter(signed char mask, uc *op1, uc *op0, uc *oq0,
                               uc *oq1) {
