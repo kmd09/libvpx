@@ -34,6 +34,11 @@ static unsigned char *abs_lut_midpoint;
 static const int abs_lut_size = 512;
 static const int abs_lut_offset = 256;
 
+static unsigned char *thresh_lut;
+static unsigned char *thresh_lut_midpoint;
+static const int thresh_lut_size = 2048;
+static const int thresh_lut_offset = 1024;
+
 // Call from vp8_loop_filter_init() to set up the lut.
 void initialize_clamp_lut(void) {
   if (!clamp_lut_signed) {
@@ -60,6 +65,14 @@ void initialize_clamp_lut(void) {
       abs_lut[i] = (j < 0) ? -j : j;
     }
   }
+  if (!thresh_lut) {
+    thresh_lut = malloc(sizeof(unsigned char) * thresh_lut_size);
+    thresh_lut_midpoint = thresh_lut + thresh_lut_offset;
+    for (int i = 0; i < thresh_lut_size; i++) {
+      int j = i - thresh_lut_offset;
+      thresh_lut[i] = (j < 0) ? -1 : 0;
+    }
+  }
 }
 
 static int vp8_int_clamp(int t) {
@@ -74,13 +87,22 @@ static signed char vp8_signed_char_clamp(int t) {
   return clamp_lut_signed_midpoint[t];
 }
 
-static int vp8_abs(int val) {
+static unsigned char vp8_abs(int val) {
   return abs_lut_midpoint[val];
 }
 
+/**
+ * returns -1 if val > thresh, 0 otherwise
+ */
+static int vp8_thresh(int val, int thresh) {
+  return thresh_lut_midpoint[thresh - val];
+}
+
 /* should we apply any filter at all ( 11111111 yes, 00000000 no) */
-static signed char vp8_filter_mask(uc limit, uc blimit, uc p3, uc p2, uc p1,
-                                   uc p0, uc q0, uc q1, uc q2, uc q3) {
+// use int param instead of unsigned chars for emscripten
+static signed char vp8_filter_mask(int limit, int blimit, int p3, int p2, int p1,
+                                   int p0, int q0, int q1, int q2, int q3) {
+  /*
   signed char mask = 0;
   mask |= (vp8_abs(p3 - p2) > limit);
   mask |= (vp8_abs(p2 - p1) > limit);
@@ -90,14 +112,41 @@ static signed char vp8_filter_mask(uc limit, uc blimit, uc p3, uc p2, uc p1,
   mask |= (vp8_abs(q3 - q2) > limit);
   mask |= (vp8_abs(p0 - q0) * 2 + vp8_abs(p1 - q1) / 2 > blimit);
   return mask - 1;
+  */
+  /*
+  return (vp8_abs(p3 - p2) > limit) ? 0 :
+    (vp8_abs(p2 - p1) > limit) ? 0 :
+    (vp8_abs(p1 - p0) > limit) ? 0 :
+    (vp8_abs(q1 - q0) > limit) ? 0 :
+    (vp8_abs(q2 - q1) > limit) ? 0 :
+    (vp8_abs(q3 - q2) > limit) ? 0 :
+    (vp8_abs(p0 - q0) * 2 + vp8_abs(p1 - q1) / 2 > blimit) ? 0 :
+    -1;
+  */
+  return ~(vp8_thresh(vp8_abs(p3 - p2), limit) |
+    vp8_thresh(vp8_abs(p2 - p1), limit) |
+    vp8_thresh(vp8_abs(p1 - p0), limit) |
+    vp8_thresh(vp8_abs(q1 - q0), limit) |
+    vp8_thresh(vp8_abs(q2 - q1), limit) |
+    vp8_thresh(vp8_abs(q3 - q2), limit) |
+    vp8_thresh(vp8_abs(p0 - q0) * 2 + vp8_abs(p1 - q1) / 2, blimit));
 }
 
 /* is there high variance internal edge ( 11111111 yes, 00000000 no) */
-static signed char vp8_hevmask(uc thresh, uc p1, uc p0, uc q0, uc q1) {
+static signed char vp8_hevmask(int thresh, int p1, int p0, int q0, int q1) {
+  /*
   signed char hev = 0;
   hev |= (vp8_abs(p1 - p0) > thresh) * -1;
   hev |= (vp8_abs(q1 - q0) > thresh) * -1;
   return hev;
+  */
+  /*
+  return (vp8_abs(p1 - p0) > thresh) ? -1 :
+    (vp8_abs(q1 - q0) > thresh) ? -1 :
+    0;
+  */
+  return vp8_thresh(vp8_abs(p1 - p0), thresh) |
+    vp8_thresh(vp8_abs(q1 - q0), thresh);
 }
 
 #else
