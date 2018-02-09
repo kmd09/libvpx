@@ -43,7 +43,8 @@ void initialize_clamp_lut(void) {
   if (!clamp_lut_unsigned) {
     clamp_lut_unsigned = malloc(sizeof(unsigned char) * clamp_lut_size);
     for (int i = 0; i < clamp_lut_size; i++) {
-      clamp_lut_unsigned[i] = (i > 255 ? 255 : i);
+      int j = i - clamp_lut_offset;
+      clamp_lut_unsigned[i] = (j < 0 ? 0 : (j > 255 ? 255 : j));
     }
   }
 }
@@ -53,7 +54,7 @@ static int vp8_int_clamp(int t) {
 }
 
 static int vp8_uint_clamp(int t) {
-  return clamp_lut_unsigned[t];
+  return clamp_lut_unsigned[t + clamp_lut_offset];
 }
 #endif
 
