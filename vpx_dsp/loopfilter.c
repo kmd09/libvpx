@@ -278,6 +278,45 @@ static INLINE void filter16(int8_t mask, uint8_t thresh, uint8_t flat,
                             uint8_t *oq3, uint8_t *oq4, uint8_t *oq5,
                             uint8_t *oq6, uint8_t *oq7) {
   if (flat2 && flat && mask) {
+#ifdef EMSCRIPTEN
+    // Use 32-bit type to avoid an extraneous conversion
+    const uint32_t p7 = *op7, p6 = *op6, p5 = *op5, p4 = *op4, p3 = *op3,
+                   p2 = *op2, p1 = *op1, p0 = *op0;
+
+    const uint32_t q0 = *oq0, q1 = *oq1, q2 = *oq2, q3 = *oq3, q4 = *oq4,
+                   q5 = *oq5, q6 = *oq6, q7 = *oq7;
+
+    // No autovectorization yet so let's serialize a bit.
+    // 15-tap filter [1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1]
+    uint32_t running = p7 * 7 + p6 * 2 + p5 + p4 + p3 + p2 + p1 + p0 + q0;
+    *op6 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p7 - p6 + p5 + q1;
+    *op5 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p7 - p5 + p4 + q2;
+    *op4 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p7 - p4 + p3 + q3;
+    *op3 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p7 - p3 + p2 + q4;
+    *op2 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p7 - p2 + p1 + q5;
+    *op1 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p7 - p1 + p0 + q6;
+    *op0 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p7 - p0 + q0 + q7;
+    *oq0 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p6 - q0 + q1 + q7;
+    *oq1 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p5 - q1 + q2 + q7;
+    *oq2 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p4 - q2 + q3 + q7;
+    *oq3 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p3 - q3 + q4 + q7;
+    *oq4 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p2 - q4 + q5 + q7;
+    *oq5 = ROUND_POWER_OF_TWO(running, 4);
+    running = running - p1 - p5 + q6 + q7;
+    *oq6 = ROUND_POWER_OF_TWO(running, 4);
+#else
     const uint8_t p7 = *op7, p6 = *op6, p5 = *op5, p4 = *op4, p3 = *op3,
                   p2 = *op2, p1 = *op1, p0 = *op0;
 
@@ -319,6 +358,7 @@ static INLINE void filter16(int8_t mask, uint8_t thresh, uint8_t flat,
         p1 + p0 + q0 + q1 + q2 + q3 + q4 + q5 * 2 + q6 + q7 * 6, 4);
     *oq6 = ROUND_POWER_OF_TWO(
         p0 + q0 + q1 + q2 + q3 + q4 + q5 + q6 * 2 + q7 * 7, 4);
+#endif
   } else {
     filter8(mask, thresh, flat, op3, op2, op1, op0, oq0, oq1, oq2, oq3);
   }
