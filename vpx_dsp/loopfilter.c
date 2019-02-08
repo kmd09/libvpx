@@ -199,6 +199,9 @@ void vpx_lpf_vertical_4_dual_c(uint8_t *s, int pitch, const uint8_t *blimit0,
   vpx_lpf_vertical_4_c(s + 8 * pitch, pitch, blimit1, limit1, thresh1);
 }
 
+#ifdef EMSCRIPTEN
+__attribute__((always_inline))
+#endif
 static INLINE void filter8(int8_t mask, uint8_t thresh, uint8_t flat,
                            uint8_t *op3, uint8_t *op2, uint8_t *op1,
                            uint8_t *op0, uint8_t *oq0, uint8_t *oq1,
@@ -270,6 +273,9 @@ void vpx_lpf_vertical_8_dual_c(uint8_t *s, int pitch, const uint8_t *blimit0,
   vpx_lpf_vertical_8_c(s + 8 * pitch, pitch, blimit1, limit1, thresh1);
 }
 
+#ifdef EMSCRIPTEN
+__attribute__((always_inline))
+#endif
 static INLINE void filter16(int8_t mask, uint8_t thresh, uint8_t flat,
                             uint8_t flat2, uint8_t *op7, uint8_t *op6,
                             uint8_t *op5, uint8_t *op4, uint8_t *op3,
