@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "vpx/vpx_image.h"
 #include "vpx/vpx_integer.h"
@@ -185,6 +186,7 @@ int vpx_img_set_rect(vpx_image_t *img, unsigned int x, unsigned int y,
       if (img->fmt & VPX_IMG_FMT_HAS_ALPHA) {
         img->planes[VPX_PLANE_ALPHA] =
             data + x * bytes_per_sample + y * img->stride[VPX_PLANE_ALPHA];
+        printf("vpx_img_set_rect alpha: %u\n", img->planes[VPX_PLANE_ALPHA]);
         data += img->h * img->stride[VPX_PLANE_ALPHA];
       }
 

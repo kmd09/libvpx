@@ -10,6 +10,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "./vp8_rtcd.h"
 #include "./vpx_dsp_rtcd.h"
@@ -213,7 +214,8 @@ static void yuvconfig2image(vpx_image_t *img, const YV12_BUFFER_CONFIG *yv12,
   img->planes[VPX_PLANE_Y] = yv12->y_buffer;
   img->planes[VPX_PLANE_U] = yv12->u_buffer;
   img->planes[VPX_PLANE_V] = yv12->v_buffer;
-  img->planes[VPX_PLANE_ALPHA] = NULL;
+  img->planes[VPX_PLANE_ALPHA] = yv12->alpha_buffer;
+  printf("yvconfig2 alpha: %u\n", yv12->alpha_buffer);
   img->stride[VPX_PLANE_Y] = yv12->y_stride;
   img->stride[VPX_PLANE_U] = yv12->uv_stride;
   img->stride[VPX_PLANE_V] = yv12->uv_stride;
